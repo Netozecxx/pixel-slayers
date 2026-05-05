@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Slayers</title>
+
+<style>
+body{margin:0;overflow:hidden;background:#000;font-family:sans-serif}
+#ui{position:fixed;top:10px;left:10px;color:#fff}
+
+#start{
+position:fixed;top:0;left:0;width:100%;height:100%;
+display:flex;align-items:center;justify-content:center;
+flex-direction:column;background:rgba(0,0,0,0.6);color:white;
+}
+
+#joy{
+position:fixed;width:80px;height:80px;border-radius:50%;
+background:rgba(255,255,255,0.2);display:none;
+}
+#stick{
+position:absolute;width:40px;height:40px;border-radius:50%;
+background:rgba(255,255,255,0.5);top:20px;left:20px;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="c"></canvas>
+<div id="ui"></div>
+<div id="start">Toque para começar</div>
+<div id="joy"><div id="stick"></div></div>
+
+<script>
+const c=document.getElementById("c"),x=c.getContext("2d");
+c.width=innerWidth;c.height=innerHeight;
+
+let start=document.getElementById("start");
+
+// player
+let p={x:c.width/2,y:c.height/2,hp:100,d:5,atk:400,lvl:1,coin:0,chaos:0};
+
+// save
+let s=localStorage.getItem("save");
+if(s) Object.assign(p,JSON.parse(s));
+
+let E=[],B=[],w=1,txt=0,started=false;
+
+// joystick
+let joy=document.getElementById("joy"),stick=document.getElementById("stick");
+let mx=0,my=0;
+
+addEventListener("touchstart",e=>{
+if(!started){started=true;start.style.display="none";return;}
+joy.style.display="block";
+joy.style.left=e.touches[0].clientX-40+"px";
+joy.style.top=e.touches[0].clientY-40+"px";
+});
+
+addEventListener("touchmove",e=>{
+let dx=e.touches[0].clientX-(joy.offsetLeft+40);
+let dy=e.touches[0].clientY-(joy.offsetTop+40);
+let d=Math.hypot(dx,dy),m=30;
+if(d>m){dx=dx/d*m;dy=dy/d*m;}
+stick.style.left=20+dx+"px";
+stick.style.top=20+dy+"px";
+mx=dx/30;my=dy/30;
+});
+
+addEventListener("touchend",()=>{joy.style.display="none";mx=0;my=0;});
+
+// spawn
+setInterval(()=>{
+if(!started)return;
+for(let i=0;i<w*2;i++){
+E.push({x:Math.random()*c.width,y:Math.random()*c.height,h:30,s:1,d:5});
+}
+if(w%10==0)E.push({x:Math.random()*c.width,y:Math.random()*c.height,h:200,s:0.5,d:15});
+w++;
+},4000);
+
+// tiro
+setInterval(()=>{
+if(!started||E.length==0)return;
+let t=E[0];
+B.push({x:p.x,y:p.y,tx:t.x,ty:t.y});
+},p.atk);
+
+function loop(){
+
+// fundo com leve gradiente
+let g=x.createLinearGradient(0,0,c.width,c.height);
+g.addColorStop(0,"#1a1a1a");
+g.addColorStop(1,"#000");
+x.fillStyle=g;
+x.fillRect(0,0,c.width,c.height);
+
+if(!started){requestAnimationFrame(loop);return;}
+
+// movimento
+p.x+=mx*3;p.y+=my*3;
+
+// inimigos
+E.forEach(e=>{
+let dx=p.x-e.x,dy=p.y-e.y,d=Math.hypot(dx,dy);
+e.x+=dx/d*e.s;e.y+=dy/d*e.s;
+if(d<15)p.hp-=0.1;
+});
+
+// tiros
+B.forEach((b,i)=>{
+let dx=b.tx-b.x,dy=b.ty-b.y,d=Math.hypot(dx,dy);
+b.x+=dx/d*7;b.y+=dy/d*7;
+
+// rastro
+x.fillStyle="rgba(255,150,0,0.3)";
+x.fillRect(b.x,b.y,6,6);
+
+E.forEach((e,j)=>{
+if(Math.hypot(b.x-e.x,b.y-e.y)<10){
+
+// impacto
+x.fillStyle="yellow";
+x.fillRect(e.x-5,e.y-5,10,10);
+
+e.h-=p.d;
+
+// explosão leve
+E.forEach(en=>{
+if(Math.hypot(en.x-e.x,en.y-e.y)<40)en.h-=p.d*0.5;
+});
+
+B.splice(i,1);
+
+if(e.h<=0){
+p.coin+=5;
+E.splice(j,1);
+}
+}
+});
+});
+
+// player corpo
+x.fillStyle="#ff4444";
+x.beginPath();
+x.arc(p.x,p.y,8,0,Math.PI*2);
+x.fill();
+
+// cabeça/faixa
+x.fillStyle="red";
+x.fillRect(p.x-6,p.y-10,12,3);
+
+// cajado DIRECIONADO
+if(E.length){
+let t=E[0];
+let ang=Math.atan2(t.y-p.y,t.x-p.x);
+let cx=p.x+Math.cos(ang)*10;
+let cy=p.y+Math.sin(ang)*10;
+
+x.strokeStyle="orange";
+x.beginPath();
+x.moveTo(p.x,p.y);
+x.lineTo(cx,cy);
+x.stroke();
+}
+
+// bola de fogo
+x.fillStyle="orange";
+B.forEach(b=>{
+x.beginPath();
+x.arc(b.x,b.y,4,0,Math.PI*2);
+x.fill();
+});
+
+// inimigos mais “orgânicos”
+E.forEach(e=>{
+x.fillStyle=e.h>100?"purple":"green";
+x.beginPath();
+x.arc(e.x,e.y,7,0,Math.PI*2);
+x.fill();
+});
+
+// UI
+ui.innerText=`HP:${Math.floor(p.hp)} | $:${p.coin}`;
+
+// overdrive texto (placeholder)
+if(txt>0){
+x.fillStyle="red";
+x.font="40px sans-serif";
+x.textAlign="center";
+x.fillText("OVERDRIVE",c.width/2,c.height/2);
+txt--;
+}
+
+// save
+localStorage.setItem("save",JSON.stringify(p));
+
+requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+  </html>
